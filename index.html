@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Stretch</title>
+<link rel="apple-touch-icon" href="icon.png">
+<style>
+  :root { --bg:#0e0f13; --card:#181a21; --fg:#f2f3f7; --dim:#8b90a0; --acc:#7c9cff; --good:#57d99a; }
+  * { box-sizing:border-box; margin:0; padding:0; touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+  body { background:var(--bg); color:var(--fg); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+         min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:max(12px,env(safe-area-inset-top)) 14px 24px; }
+  h1 { font-size:15px; color:var(--dim); font-weight:600; letter-spacing:.12em; text-transform:uppercase; margin:6px 0 10px; }
+  .days { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; margin-bottom:14px; }
+  .days button { background:var(--card); color:var(--dim); border:1px solid #262a35; border-radius:999px;
+                 padding:7px 12px; font-size:13px; font-weight:600; cursor:pointer; }
+  .days button.on { background:var(--acc); color:#0b1020; border-color:var(--acc); }
+  .stage { width:100%; max-width:520px; background:var(--card); border-radius:22px; padding:26px 18px 20px; text-align:center; }
+  .phase { font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim); min-height:15px; }
+  .name  { font-size:clamp(26px,7vw,40px); font-weight:800; line-height:1.15; margin:8px 0 2px; min-height:1.2em; }
+  .side  { font-size:17px; color:var(--acc); font-weight:700; min-height:22px; }
+  .clock { font-variant-numeric:tabular-nums; font-size:clamp(72px,24vw,132px); font-weight:800; line-height:1; margin:10px 0 6px; }
+  .clock.prep { color:var(--good); }
+  .next  { color:var(--dim); font-size:15px; min-height:20px; }
+  .meta  { color:var(--dim); font-size:13px; margin-top:10px; }
+  .ctl { display:flex; gap:10px; justify-content:center; margin-top:18px; }
+  .ctl button { background:#232734; color:var(--fg); border:none; border-radius:16px; font-size:22px;
+                width:64px; height:56px; cursor:pointer; }
+  .ctl button.main { background:var(--acc); color:#0b1020; width:96px; font-weight:800; }
+  .opts { margin-top:14px; color:var(--dim); font-size:14px; display:flex; gap:18px; }
+  .opts label { display:flex; align-items:center; gap:6px; cursor:pointer; }
+  ol.plan { width:100%; max-width:520px; margin-top:16px; padding:0 6px 0 26px; color:var(--dim); font-size:14px; line-height:1.75; }
+  ol.plan li.now { color:var(--fg); font-weight:700; }
+  ol.plan span { float:right; font-variant-numeric:tabular-nums; }
+  .sect { color:var(--acc); font-size:12px; letter-spacing:.12em; text-transform:uppercase; margin:14px 0 2px; list-style:none; margin-left:-20px; }
+</style>
+</head>
+<body>
+<h1>Daily Stretch</h1>
+<div class="days" id="days"></div>
+<div class="stage">
+  <div class="phase" id="phase"></div>
+  <div class="name" id="name">Ready</div>
+  <div class="side" id="side"></div>
+  <div class="clock" id="clock">0:00</div>
+  <div class="next" id="next"></div>
+  <div class="meta" id="meta"></div>
+  <div class="ctl">
+    <button id="back" title="Back">⏮</button>
+    <button id="play" class="main" title="Start">▶</button>
+    <button id="skip" title="Skip">⏭</button>
+    <button id="restart" title="Restart">↺</button>
+  </div>
+  <div class="opts">
+    <label><input type="checkbox" id="voice" checked> Voice</label>
+    <label><input type="checkbox" id="beep" checked> Beeps</label>
+  </div>
+</div>
+<ol class="plan" id="plan"></ol>
+
+<script>
+/* ---------- EDIT TIMES/EXERCISES HERE (t = seconds; sides:true = done right then left) ---------- */
+const PREP = 7; // get-into-position seconds before each new exercise
+
+const BASE = [ // EVERY DAY, in order
+  {n:"Single Leg Forward Fold", t:120, sides:true},
+  {n:"Cross Shin Forward Fold", t:90,  sides:true},
+  {n:"Child's Pose",            t:180},
+  {n:"Puppy Dog",               t:90},
+  {n:"Child's Pose Lat Stretch",t:90,  sides:true},
+  {n:"Seal",                    t:60},
+  {n:"90/90",                   t:120, sides:true},
+  {n:"Seiza",                   t:120},
+];
+
+const WEEKLY = { // each ★ item once per week; day's additions come BEFORE the every-day block
+  1:{label:"Shoulders I", items:[{n:"Doorway Shoulder Flexion",t:90},{n:"Banded Bully",t:90,sides:true},{n:"Banded Tricep",t:90,sides:true},{n:"Shoulder Dislocates",t:120}]},
+  2:{label:"Thoracic",    items:[{n:"Cat Cow",t:120},{n:"Twisted Cross",t:90,sides:true},{n:"Saddle Thoracic Twist (PVC)",t:90,sides:true}]},
+  3:{label:"Hamstrings + Spine", items:[{n:"Jefferson Curl",t:90},{n:"Supine Hamstring PNF",t:90,sides:true},{n:"Standing Straddle Forward Fold",t:90}]},
+  4:{label:"Shoulders II + Wrists", items:[{n:"Double Flat Needle",t:90},{n:"Puppy on Bench",t:90},{n:"Saddle Archer",t:90,sides:true},
+      {n:"Wrist Flexor Stretch",t:30},{n:"Reverse Wrist Stretch",t:30},{n:"Wrist Leans",t:30},{n:"Finger & Palm Lifts",t:30}]},
+  5:{label:"Hips + Groin",items:[{n:"Dragon",t:90,sides:true},{n:"Figure 4 Single Leg Squats",t:45,sides:true},{n:"Butterfly Forward Fold",t:90},{n:"Sumo Squat w/ Shoulder Twist",t:45,sides:true}]},
+  6:{label:"Spine + Core",items:[{n:"Book Opener",t:90,sides:true},{n:"Scorpion",t:60,sides:true},{n:"RDL Hugged-Arms Twist",t:60},{n:"PVC Oblique Isometrics",t:45,sides:true}]},
+  0:{label:"Ankles + Neck + PVC", items:[{n:"Classic Dorsiflexion",t:60,sides:true},{n:"Down Dog",t:60},
+      {n:"Front Rack (PVC)",t:30,sides:true},{n:"External Rotation (PVC)",t:30,sides:true},{n:"Internal Rotation (PVC)",t:30,sides:true},{n:"Neck Side-to-Side Isometrics",t:120}]},
+};
+/* ----------------------------------------------------------------------------------------------- */
+
+const DAYNAMES=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+let day=(new Date()).getDay(), segs=[], idx=-1, running=false, segStart=0, remaining=0, raf=null, wakeLock=null;
+
+const $=id=>document.getElementById(id);
+const fmt=s=>{s=Math.max(0,Math.ceil(s));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");};
+const say=t=>{ if(!$("voice").checked||!window.speechSynthesis) return;
+  const u=new SpeechSynthesisUtterance(t); u.rate=1.0; speechSynthesis.cancel(); speechSynthesis.speak(u); };
+const dur=t=>{const m=Math.floor(t/60),s=t%60;let out=m?`${m} minute${m>1?"s":""}`:"";if(s)out+=(out?" ":"")+`${s} seconds`;return out;};
+let actx=null; function beep(f=880,d=0.12,n=1){ if(!$("beep").checked) return;
+  actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+  for(let i=0;i<n;i++){const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=f;o.connect(g);g.connect(actx.destination);
+    const t0=actx.currentTime+i*0.2;g.gain.setValueAtTime(0.25,t0);g.gain.exponentialRampToValueAtTime(0.001,t0+d);o.start(t0);o.stop(t0+d);} }
+
+function build(){
+  const w=WEEKLY[day]; segs=[]; const push=(ex,section)=>{
+    segs.push({prep:true,n:ex.n,t:PREP,section});
+    if(ex.sides){ segs.push({n:ex.n,side:"Right side",t:ex.t,section,first:true});
+                  segs.push({n:ex.n,side:"Left side",t:ex.t,section,switch:true}); }
+    else segs.push({n:ex.n,t:ex.t,section,first:true});
+  };
+  w.items.forEach(e=>push(e,"today")); BASE.forEach(e=>push(e,"base"));
+  idx=-1; running=false; remaining=0; cancelAnimationFrame(raf);
+  renderPlan(); renderIdle();
+}
+const total=()=>segs.reduce((a,s)=>a+s.t,0);
+
+function renderPlan(){
+  const w=WEEKLY[day]; let h=`<li class="sect">Today: ${w.label}</li>`;
+  const li=(e,i)=>`<li data-ex="${e.n}">${e.n}${e.sides?" (per side)":""}<span>${fmt(e.t)}${e.sides?"/side":""}</span></li>`;
+  w.items.forEach(e=>h+=li(e)); h+=`<li class="sect">Every Day</li>`; BASE.forEach(e=>h+=li(e));
+  $("plan").innerHTML=h;
+}
+function highlight(){ const cur=idx>=0&&idx<segs.length?segs[idx].n:null;
+  document.querySelectorAll("#plan li[data-ex]").forEach(li=>li.classList.toggle("now",li.dataset.ex===cur)); }
+
+function renderIdle(){ $("phase").textContent=WEEKLY[day].label+" + every day";
+  $("name").textContent="Ready"; $("side").textContent=""; $("clock").textContent=fmt(total());
+  $("clock").classList.remove("prep"); $("next").textContent="First: "+segs[1].n;
+  $("meta").textContent=`${DAYNAMES[day]} · ${segs.filter(s=>!s.prep).length} timed holds · ${fmt(total())} total`;
+  $("play").textContent="▶"; highlight(); }
+
+function show(){ const s=segs[idx];
+  $("phase").textContent=s.prep?"get ready":(s.section==="today"?"today's focus":"every day");
+  $("name").textContent=s.n; $("side").textContent=s.side||"";
+  $("clock").classList.toggle("prep",!!s.prep);
+  const nxt=segs.slice(idx+1).find(x=>!x.prep);
+  $("next").textContent=nxt?("Next: "+nxt.n+(nxt.side?" — "+nxt.side.toLowerCase():"")):"Last one";
+  const done=segs.slice(0,idx).reduce((a,x)=>a+x.t,0);
+  $("meta").textContent="Session remaining ~"+fmt(total()-done-(s.t-remaining));
+  highlight(); }
+
+function announce(s){ if(s.prep) say("Next: "+s.n);
+  else if(s.switch){ beep(660); say("Switch sides."); }
+  else { beep(880); say(s.n+". "+dur(s.t)+(s.side?", each side":"")+"."); } }
+
+function start(i){ idx=i; const s=segs[idx]; remaining=s.t; segStart=performance.now(); announce(s); show(); }
+function advance(){ if(idx>=segs.length-1){ finish(); return; } start(idx+1); }
+function finish(){ running=false; cancelAnimationFrame(raf); beep(1040,0.15,3); say("Done.");
+  $("phase").textContent=""; $("name").textContent="Done ✦"; $("side").textContent="";
+  $("clock").textContent="0:00"; $("next").textContent=""; $("play").textContent="▶"; idx=-1; releaseWake(); }
+
+function tick(){ if(!running) return;
+  const s=segs[idx], el=(performance.now()-segStart)/1000; remaining=s.t-el;
+  if(remaining<=0){ advance(); } else { $("clock").textContent=fmt(remaining); show(); }
+  raf=requestAnimationFrame(tick); }
+
+async function grabWake(){ try{ wakeLock=await navigator.wakeLock?.request("screen"); }catch(e){} }
+function releaseWake(){ try{ wakeLock?.release(); wakeLock=null; }catch(e){} }
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible"&&running) grabWake(); });
+
+$("play").onclick=()=>{ if(running){ running=false; cancelAnimationFrame(raf); $("play").textContent="▶"; }
+  else { if(idx<0) start(0); else segStart=performance.now()-(segs[idx].t-remaining)*1000;
+    running=true; $("play").textContent="⏸"; grabWake(); raf=requestAnimationFrame(tick); } };
+$("skip").onclick=()=>{ if(idx<0) return; advance(); };
+$("back").onclick=()=>{ if(idx<=0) return; let i=idx-1; while(i>0&&segs[i].prep) i--; start(i); };
+$("restart").onclick=()=>{ build(); };
+
+const dd=$("days");
+[1,2,3,4,5,6,0].forEach(d=>{ const b=document.createElement("button");
+  b.textContent=DAYNAMES[d]; b.onclick=()=>{ day=d; [...dd.children].forEach(x=>x.classList.remove("on")); b.classList.add("on"); build(); };
+  if(d===day) b.classList.add("on"); dd.appendChild(b); });
+build();
+</script>
+</body>
+</html>
