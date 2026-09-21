@@ -13,6 +13,10 @@
   body { background:var(--bg); color:var(--fg); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
          min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:max(12px,env(safe-area-inset-top)) 14px 24px; }
   h1 { font-size:15px; color:var(--dim); font-weight:600; letter-spacing:.12em; text-transform:uppercase; margin:6px 0 10px; }
+  .modes { display:flex; gap:6px; justify-content:center; margin-bottom:10px; }
+  .modes button { background:var(--card); color:var(--dim); border:1px solid #262a35; border-radius:999px;
+                  padding:8px 18px; font-size:14px; font-weight:700; cursor:pointer; }
+  .modes button.on { background:#2b2f3d; color:var(--fg); border-color:var(--acc); }
   .days { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; margin-bottom:14px; }
   .days button { background:var(--card); color:var(--dim); border:1px solid #262a35; border-radius:999px;
                  padding:7px 12px; font-size:13px; font-weight:600; cursor:pointer; }
@@ -39,6 +43,7 @@
 </head>
 <body>
 <h1>Daily Stretch</h1>
+<div class="modes" id="modes"></div>
 <div class="days" id="days"></div>
 <div class="stage">
   <div class="phase" id="phase"></div>
@@ -86,10 +91,39 @@ const WEEKLY = { // each ★ item once per week; day's additions come BEFORE the
   0:{label:"Ankles + Neck + PVC", items:[{n:"Classic Dorsiflexion",t:60,sides:true},{n:"Down Dog",t:60},
       {n:"Front Rack (PVC)",t:30,sides:true},{n:"External Rotation (PVC)",t:30,sides:true},{n:"Internal Rotation (PVC)",t:30,sides:true},{n:"Neck Side-to-Side Isometrics",t:120}]},
 };
+
+// ===== 2x / WEEK MODE: longer every-day holds + the whole week's extras split into 2 sessions =====
+const BASE2 = [ // EVERY DAY (long holds) — used only in 2x/week mode
+  {n:"Single Leg Forward Fold", t:240, sides:true},
+  {n:"Cross Shin Forward Fold", t:120, sides:true},
+  {n:"Child's Pose",            t:300},
+  {n:"Puppy Dog",               t:120},
+  {n:"Child's Pose Lat Stretch",t:120, sides:true},
+  {n:"Seal",                    t:120},
+  {n:"90/90",                   t:120, sides:true},
+  {n:"Seiza",                   t:120},
+];
+const SPLIT = { // every non-every-day exercise, spread across two ~equal sessions
+  A:{label:"Upper Body", items:[
+    {n:"Doorway Shoulder Flexion",t:90},{n:"Banded Bully",t:90,sides:true},{n:"Banded Tricep",t:90,sides:true},{n:"Shoulder Dislocates",t:120},
+    {n:"Cat Cow",t:120},{n:"Twisted Cross",t:90,sides:true},{n:"Saddle Thoracic Twist (PVC)",t:90,sides:true},
+    {n:"Double Flat Needle",t:90},{n:"Puppy on Bench",t:90},{n:"Saddle Archer",t:90,sides:true},{n:"Book Opener",t:90,sides:true}]},
+  B:{label:"Lower, Core & Extremities", items:[
+    {n:"Jefferson Curl",t:90},{n:"Supine Hamstring PNF",t:90,sides:true},{n:"Standing Straddle Forward Fold",t:90},
+    {n:"Dragon",t:90,sides:true},{n:"Figure 4 Single Leg Squats",t:45,sides:true},{n:"Butterfly Forward Fold",t:90},{n:"Sumo Squat w/ Shoulder Twist",t:45,sides:true},
+    {n:"Scorpion",t:60,sides:true},{n:"RDL Hugged-Arms Twist",t:60},{n:"PVC Oblique Isometrics",t:45,sides:true},
+    {n:"Classic Dorsiflexion",t:60,sides:true},{n:"Down Dog",t:60},
+    {n:"Front Rack (PVC)",t:30,sides:true},{n:"External Rotation (PVC)",t:30,sides:true},{n:"Internal Rotation (PVC)",t:30,sides:true},
+    {n:"Wrist Flexor Stretch",t:30},{n:"Reverse Wrist Stretch",t:30},{n:"Wrist Leans",t:30},{n:"Finger & Palm Lifts",t:30},
+    {n:"Neck Side-to-Side Isometrics",t:120}]},
+};
 /* ----------------------------------------------------------------------------------------------- */
 
 const DAYNAMES=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-let day=(new Date()).getDay(), segs=[], idx=-1, running=false, segStart=0, remaining=0, raf=null, wakeLock=null;
+let mode="daily", day=(new Date()).getDay(), sel="A", segs=[], idx=-1, running=false, segStart=0, remaining=0, raf=null, wakeLock=null;
+function plan(){ return mode==="daily"
+  ? {label:WEEKLY[day].label, items:WEEKLY[day].items, base:BASE, tag:DAYNAMES[day], everyday:"every day"}
+  : {label:SPLIT[sel].label, items:SPLIT[sel].items, base:BASE2, tag:"Session "+sel, everyday:"every day (long holds)"}; }
 
 const $=id=>document.getElementById(id);
 const fmt=s=>{s=Math.max(0,Math.ceil(s));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");};
@@ -102,31 +136,32 @@ let actx=null; function beep(f=880,d=0.12,n=1){ if(!$("beep").checked) return;
     const t0=actx.currentTime+i*0.2;g.gain.setValueAtTime(0.25,t0);g.gain.exponentialRampToValueAtTime(0.001,t0+d);o.start(t0);o.stop(t0+d);} }
 
 function build(){
-  const w=WEEKLY[day]; segs=[]; const push=(ex,section)=>{
+  const p=plan(); segs=[]; const push=(ex,section)=>{
     segs.push({prep:true,n:ex.n,t:PREP,section});
     if(ex.sides){ segs.push({n:ex.n,side:"Right side",t:ex.t,section,first:true});
                   segs.push({n:ex.n,side:"Left side",t:ex.t,section,switch:true}); }
     else segs.push({n:ex.n,t:ex.t,section,first:true});
   };
-  w.items.forEach(e=>push(e,"today")); BASE.forEach(e=>push(e,"base"));
+  p.items.forEach(e=>push(e,"today")); p.base.forEach(e=>push(e,"base"));
   idx=-1; running=false; remaining=0; cancelAnimationFrame(raf);
   renderPlan(); renderIdle();
 }
 const total=()=>segs.reduce((a,s)=>a+s.t,0);
 
 function renderPlan(){
-  const w=WEEKLY[day]; let h=`<li class="sect">Today: ${w.label}</li>`;
+  const p=plan(); const head=mode==="daily"?("Today: "+p.label):("Session "+sel+" · "+p.label);
+  let h=`<li class="sect">${head}</li>`;
   const li=(e,i)=>`<li data-ex="${e.n}">${e.n}${e.sides?" (per side)":""}<span>${fmt(e.t)}${e.sides?"/side":""}</span></li>`;
-  w.items.forEach(e=>h+=li(e)); h+=`<li class="sect">Every Day</li>`; BASE.forEach(e=>h+=li(e));
+  p.items.forEach(e=>h+=li(e)); h+=`<li class="sect">Every Day${mode==="split"?" · long holds":""}</li>`; p.base.forEach(e=>h+=li(e));
   $("plan").innerHTML=h;
 }
 function highlight(){ const cur=idx>=0&&idx<segs.length?segs[idx].n:null;
   document.querySelectorAll("#plan li[data-ex]").forEach(li=>li.classList.toggle("now",li.dataset.ex===cur)); }
 
-function renderIdle(){ $("phase").textContent=WEEKLY[day].label+" + every day";
+function renderIdle(){ const p=plan(); $("phase").textContent=p.label+" + "+p.everyday;
   $("name").textContent="Ready"; $("side").textContent=""; $("clock").textContent=fmt(total());
   $("clock").classList.remove("prep"); $("next").textContent="First: "+segs[1].n;
-  $("meta").textContent=`${DAYNAMES[day]} · ${segs.filter(s=>!s.prep).length} timed holds · ${fmt(total())} total`;
+  $("meta").textContent=`${p.tag} · ${segs.filter(s=>!s.prep).length} timed holds · ${fmt(total())} total`;
   $("play").textContent="▶"; highlight(); }
 
 function show(){ const s=segs[idx];
@@ -165,11 +200,17 @@ $("skip").onclick=()=>{ if(idx<0) return; advance(); };
 $("back").onclick=()=>{ if(idx<=0) return; let i=idx-1; while(i>0&&segs[i].prep) i--; start(i); };
 $("restart").onclick=()=>{ build(); };
 
-const dd=$("days");
-[1,2,3,4,5,6,0].forEach(d=>{ const b=document.createElement("button");
-  b.textContent=DAYNAMES[d]; b.onclick=()=>{ day=d; [...dd.children].forEach(x=>x.classList.remove("on")); b.classList.add("on"); build(); };
-  if(d===day) b.classList.add("on"); dd.appendChild(b); });
-build();
+const dd=$("days"), mm=$("modes");
+function renderChips(){ dd.innerHTML="";
+  const mk=(txt,on,fn)=>{ const b=document.createElement("button"); b.textContent=txt; if(on)b.classList.add("on"); b.onclick=fn; dd.appendChild(b); };
+  if(mode==="daily") [1,2,3,4,5,6,0].forEach(d=>mk(DAYNAMES[d], d===day, ()=>{ day=d; renderChips(); build(); }));
+  else [["A","Session A"],["B","Session B"]].forEach(([k,lab])=>mk(lab, k===sel, ()=>{ sel=k; renderChips(); build(); }));
+}
+[["daily","Daily"],["split","2× / Week"]].forEach(([k,lab])=>{ const b=document.createElement("button");
+  b.textContent=lab; if(k===mode)b.classList.add("on");
+  b.onclick=()=>{ mode=k; [...mm.children].forEach(x=>x.classList.remove("on")); b.classList.add("on"); renderChips(); build(); };
+  mm.appendChild(b); });
+renderChips(); build();
 </script>
 </body>
 </html>
