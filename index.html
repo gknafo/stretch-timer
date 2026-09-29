@@ -67,7 +67,8 @@
 
 <script>
 /* ---------- EDIT TIMES/EXERCISES HERE (t = seconds; sides:true = done right then left) ---------- */
-const PREP = 7; // get-into-position seconds before each new exercise
+const PREP = 7;   // get-into-position seconds before each new exercise
+const SWITCH = 5; // reposition seconds between right and left side (not counted in the hold; 0 = none)
 
 const BASE = [ // EVERY DAY, in order
   {n:"Single Leg Forward Fold", t:120, sides:true},
@@ -139,7 +140,8 @@ function build(){
   const p=plan(); segs=[]; const push=(ex,section)=>{
     segs.push({prep:true,n:ex.n,t:PREP,section});
     if(ex.sides){ segs.push({n:ex.n,side:"Right side",t:ex.t,section,first:true});
-                  segs.push({n:ex.n,side:"Left side",t:ex.t,section,switch:true}); }
+                  if(SWITCH>0) segs.push({n:ex.n,side:"Switch to left side",t:SWITCH,section,prep:true,swap:true});
+                  segs.push({n:ex.n,side:"Left side",t:ex.t,section,second:true}); }
     else segs.push({n:ex.n,t:ex.t,section,first:true});
   };
   p.items.forEach(e=>push(e,"today")); p.base.forEach(e=>push(e,"base"));
@@ -165,7 +167,7 @@ function renderIdle(){ const p=plan(); $("phase").textContent=p.label+" + "+p.ev
   $("play").textContent="▶"; highlight(); }
 
 function show(){ const s=segs[idx];
-  $("phase").textContent=s.prep?"get ready":(s.section==="today"?"today's focus":"every day");
+  $("phase").textContent=s.swap?"switch sides":s.prep?"get ready":(s.section==="today"?"today's focus":"every day");
   $("name").textContent=s.n; $("side").textContent=s.side||"";
   $("clock").classList.toggle("prep",!!s.prep);
   const nxt=segs.slice(idx+1).find(x=>!x.prep);
@@ -174,9 +176,12 @@ function show(){ const s=segs[idx];
   $("meta").textContent="Session remaining ~"+fmt(total()-done-(s.t-remaining));
   highlight(); }
 
-function announce(s){ if(s.prep) say("Next: "+s.n);
-  else if(s.switch){ beep(660); say("Switch sides."); }
-  else { beep(880); say(s.n+". "+dur(s.t)+(s.side?", each side":"")+"."); } }
+function announce(s){
+  if(s.swap){ beep(660); say("Switch sides."); }                        // reposition gap, not part of the hold
+  else if(s.prep) say("Next: "+s.n);
+  else if(s.second){ beep(SWITCH>0?880:660); if(SWITCH===0) say("Switch sides."); } // left hold starts: beep only
+  else if(s.first&&s.side){ beep(880); say(s.n+", right side. "+dur(s.t)+"."); }
+  else { beep(880); say(s.n+". "+dur(s.t)+"."); } }
 
 function start(i){ idx=i; const s=segs[idx]; remaining=s.t; segStart=performance.now(); announce(s); show(); }
 function advance(){ if(idx>=segs.length-1){ finish(); return; } start(idx+1); }
