@@ -15,7 +15,7 @@
   body { background:var(--bg); color:var(--fg); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
          min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:max(12px,env(safe-area-inset-top)) 14px 24px; }
   h1 { font-size:15px; color:var(--dim); font-weight:600; letter-spacing:.12em; text-transform:uppercase; margin:6px 0 10px; }
-  .modes { display:flex; gap:6px; justify-content:center; margin-bottom:10px; }
+  .modes { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; margin-bottom:10px; }
   .modes button { background:var(--card); color:var(--dim); border:1px solid #262a35; border-radius:999px;
                   padding:8px 18px; font-size:14px; font-weight:700; cursor:pointer; }
   .modes button.on { background:#2b2f3d; color:var(--fg); border-color:var(--acc); }
@@ -124,9 +124,13 @@ const SPLIT = { // every non-every-day exercise, spread across two ~equal sessio
 
 const DAYNAMES=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 let mode="daily", day=(new Date()).getDay(), sel="A", segs=[], idx=-1, running=false, segStart=0, remaining=0, raf=null, wakeLock=null;
-function plan(){ return mode==="daily"
-  ? {label:WEEKLY[day].label, items:WEEKLY[day].items, base:BASE, tag:DAYNAMES[day], everyday:"every day"}
-  : {label:SPLIT[sel].label, items:SPLIT[sel].items, base:BASE2, tag:"Session "+sel, everyday:"every day (long holds)"}; }
+function plan(){
+  if(mode==="daily") return {label:WEEKLY[day].label, items:WEEKLY[day].items, base:BASE, tag:DAYNAMES[day], everyday:"every day",
+    groups:[["Today: "+WEEKLY[day].label, WEEKLY[day].items]]};
+  if(mode==="full") return {label:"Full Routine", items:SPLIT.A.items.concat(SPLIT.B.items), base:BASE2, tag:"Full routine", everyday:"every day (long holds)",
+    groups:[["Part 1 · "+SPLIT.A.label, SPLIT.A.items],["Part 2 · "+SPLIT.B.label, SPLIT.B.items]]};
+  return {label:SPLIT[sel].label, items:SPLIT[sel].items, base:BASE2, tag:"Session "+sel, everyday:"every day (long holds)",
+    groups:[["Session "+sel+" · "+SPLIT[sel].label, SPLIT[sel].items]]}; }
 
 const $=id=>document.getElementById(id);
 const fmt=s=>{s=Math.max(0,Math.ceil(s));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");};
@@ -153,10 +157,10 @@ function build(){
 const total=()=>segs.reduce((a,s)=>a+s.t,0);
 
 function renderPlan(){
-  const p=plan(); const head=mode==="daily"?("Today: "+p.label):("Session "+sel+" · "+p.label);
-  let h=`<li class="sect">${head}</li>`;
+  const p=plan(); let h="";
   const li=(e,i)=>`<li data-ex="${e.n}">${e.n}${e.sides?" (per side)":""}<span>${fmt(e.t)}${e.sides?"/side":""}</span></li>`;
-  p.items.forEach(e=>h+=li(e)); h+=`<li class="sect">Every Day${mode==="split"?" · long holds":""}</li>`; p.base.forEach(e=>h+=li(e));
+  p.groups.forEach(([head,items])=>{ h+=`<li class="sect">${head}</li>`; items.forEach(e=>h+=li(e)); });
+  h+=`<li class="sect">Every Day${mode!=="daily"?" · long holds":""}</li>`; p.base.forEach(e=>h+=li(e));
   $("plan").innerHTML=h;
 }
 function highlight(){ const cur=idx>=0&&idx<segs.length?segs[idx].n:null;
@@ -211,9 +215,10 @@ const dd=$("days"), mm=$("modes");
 function renderChips(){ dd.innerHTML="";
   const mk=(txt,on,fn)=>{ const b=document.createElement("button"); b.textContent=txt; if(on)b.classList.add("on"); b.onclick=fn; dd.appendChild(b); };
   if(mode==="daily") [1,2,3,4,5,6,0].forEach(d=>mk(DAYNAMES[d], d===day, ()=>{ day=d; renderChips(); build(); }));
-  else [["A","Session A"],["B","Session B"]].forEach(([k,lab])=>mk(lab, k===sel, ()=>{ sel=k; renderChips(); build(); }));
+  else if(mode==="split") [["A","Session A"],["B","Session B"]].forEach(([k,lab])=>mk(lab, k===sel, ()=>{ sel=k; renderChips(); build(); }));
+  // full mode: no chips — one session covers everything
 }
-[["daily","Daily"],["split","2× / Week"]].forEach(([k,lab])=>{ const b=document.createElement("button");
+[["daily","Daily"],["split","2× / Week"],["full","1× / Week"]].forEach(([k,lab])=>{ const b=document.createElement("button");
   b.textContent=lab; if(k===mode)b.classList.add("on");
   b.onclick=()=>{ mode=k; [...mm.children].forEach(x=>x.classList.remove("on")); b.classList.add("on"); renderChips(); build(); };
   mm.appendChild(b); });
