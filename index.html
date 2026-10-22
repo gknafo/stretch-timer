@@ -38,6 +38,9 @@
   .opts { margin-top:14px; color:var(--dim); font-size:14px; display:flex; gap:18px; }
   .opts label { display:flex; align-items:center; gap:6px; cursor:pointer; }
   ol.plan { width:100%; max-width:520px; margin-top:16px; padding:0 6px 0 26px; color:var(--dim); font-size:14px; line-height:1.75; }
+  ol.plan { list-style:none; counter-reset:ex; }
+  ol.plan li[data-ex] { counter-increment:ex; }
+  ol.plan li[data-ex]::before { content:counter(ex) ". "; display:inline-block; min-width:1.8em; margin-left:-1.8em; }
   ol.plan li.now { color:var(--fg); font-weight:700; }
   ol.plan span { float:right; font-variant-numeric:tabular-nums; }
   .sect { color:var(--acc); font-size:12px; letter-spacing:.12em; text-transform:uppercase; margin:14px 0 2px; list-style:none; margin-left:-20px; }
