@@ -66,6 +66,7 @@
   <div class="opts">
     <label><input type="checkbox" id="voice" checked> Voice</label>
     <label><input type="checkbox" id="beep" checked> Beeps</label>
+    <label><input type="checkbox" id="duck" checked> Pause music</label>
   </div>
 </div>
 <ol class="plan" id="plan"></ol>
@@ -100,20 +101,20 @@ const WEEKLY = { // each ★ item once per week; day's additions come BEFORE the
 
 // ===== 2x / WEEK MODE: longer every-day holds + the whole week's extras split into 2 sessions =====
 const BASE2 = [ // EVERY DAY (long holds) — used only in 2x/week mode
-  {n:"Single Leg Forward Fold", t:240, sides:true},
-  {n:"Cross Shin Forward Fold", t:120, sides:true},
-  {n:"Child's Pose",            t:300},
-  {n:"Puppy Dog",               t:120},
-  {n:"Child's Pose Lat Stretch",t:120, sides:true},
-  {n:"Seal",                    t:120},
+  {n:"Single Leg Forward Fold", t:180, sides:true},
+  {n:"Cross Shin Forward Fold", t:90,  sides:true},
+  {n:"Child's Pose Lat Stretch",t:90,  sides:true},
+  {n:"Child's Pose",            t:180},
+  {n:"Puppy Dog",               t:90},
+  {n:"Seal",                    t:90},
   {n:"90/90",                   t:120, sides:true},
   {n:"Seiza",                   t:120},
 ];
 const SPLIT = { // every non-every-day exercise, spread across two ~equal sessions
   A:{label:"Upper Body", items:[
-    {n:"Doorway Shoulder Flexion",t:90},{n:"Banded Bully",t:90,sides:true},{n:"Banded Tricep",t:90,sides:true},{n:"Shoulder Dislocates",t:120},
-    {n:"Cat Cow",t:120},{n:"Twisted Cross",t:90,sides:true},{n:"Saddle Thoracic Twist (PVC)",t:90,sides:true},
-    {n:"Double Flat Needle",t:90},{n:"Puppy on Bench",t:90},{n:"Saddle Archer",t:90,sides:true},{n:"Book Opener",t:90,sides:true}]},
+    {n:"Doorway Shoulder Flexion",t:90,sides:true},{n:"Banded Bully",t:90,sides:true},{n:"Banded Tricep",t:90,sides:true},{n:"Shoulder Dislocates",t:90},
+    {n:"Cat Cow",t:90},{n:"Twisted Cross",t:90,sides:true},{n:"Saddle Thoracic Twist (PVC)",t:150},
+    {n:"Double Flat Needle",t:90,sides:true},{n:"Puppy on Bench",t:90},{n:"Saddle Archer",t:90,sides:true},{n:"Book Opener",t:90,sides:true}]},
   B:{label:"Lower, Core & Extremities", items:[
     {n:"Jefferson Curl",t:90},{n:"Supine Hamstring PNF",t:90,sides:true},{n:"Standing Straddle Forward Fold",t:90},
     {n:"Dragon",t:90,sides:true},{n:"Figure 4 Single Leg Squats",t:45,sides:true},{n:"Butterfly Forward Fold",t:90},{n:"Sumo Squat w/ Shoulder Twist",t:45,sides:true},
@@ -137,10 +138,21 @@ function plan(){
 
 const $=id=>document.getElementById(id);
 const fmt=s=>{s=Math.max(0,Math.ceil(s));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");};
-const say=t=>{ if(!$("voice").checked||!window.speechSynthesis) return;
-  const u=new SpeechSynthesisUtterance(t); u.rate=1.0; speechSynthesis.cancel(); speechSynthesis.speak(u); };
+// Each cue (beep and/or voice) takes the audio session, then releases it so paused phone audio can resume.
+// iOS Safari: navigator.audioSession "transient-solo" pauses other audio and resumes it when the session goes idle.
+let actx=null, cueN=0, cueOff=null;
+function cueOn(){ actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+  try{ if(navigator.audioSession) navigator.audioSession.type=$("duck").checked?"transient-solo":"ambient"; }catch(e){}
+  clearTimeout(cueOff); if(actx.state!=="running") actx.resume().catch(()=>{}); return ++cueN; }
+function cueDone(k,ms){ if(k!==cueN) return; clearTimeout(cueOff);
+  cueOff=setTimeout(()=>{ if(k===cueN&&actx&&actx.state==="running") actx.suspend().catch(()=>{}); },ms); }
+const say=(t,k)=>{ if(!$("voice").checked||!window.speechSynthesis) return false;
+  const u=new SpeechSynthesisUtterance(t); u.rate=1.0; u.onend=u.onerror=()=>cueDone(k,300);
+  speechSynthesis.cancel(); cueDone(k,2000+t.length*90); speechSynthesis.speak(u); return true; };
+function cue(text,f,d=0.12,n=1){ const k=cueOn(); if(f) beep(f,d,n);
+  if(!(text&&say(text,k))) cueDone(k,f?n*200+400:300); }
 const dur=t=>{const m=Math.floor(t/60),s=t%60;let out=m?`${m} minute${m>1?"s":""}`:"";if(s)out+=(out?" ":"")+`${s} seconds`;return out;};
-let actx=null; function beep(f=880,d=0.12,n=1){ if(!$("beep").checked) return;
+function beep(f=880,d=0.12,n=1){ if(!$("beep").checked) return;
   actx=actx||new (window.AudioContext||window.webkitAudioContext)();
   for(let i=0;i<n;i++){const o=actx.createOscillator(),g=actx.createGain();o.frequency.value=f;o.connect(g);g.connect(actx.destination);
     const t0=actx.currentTime+i*0.2;g.gain.setValueAtTime(0.25,t0);g.gain.exponentialRampToValueAtTime(0.001,t0+d);o.start(t0);o.stop(t0+d);} }
@@ -186,15 +198,15 @@ function show(){ const s=segs[idx];
   highlight(); }
 
 function announce(s){
-  if(s.swap){ beep(660); say("Switch sides."); }                        // reposition gap, not part of the hold
-  else if(s.prep) say("Next: "+s.n);
-  else if(s.second){ beep(SWITCH>0?880:660); if(SWITCH===0) say("Switch sides."); } // left hold starts: beep only
-  else if(s.first&&s.side){ beep(880); say(s.n+", right side. "+dur(s.t)+"."); }
-  else { beep(880); say(s.n+". "+dur(s.t)+"."); } }
+  if(s.swap) cue("Switch sides.",660);                                    // reposition gap, not part of the hold
+  else if(s.prep) cue("Next: "+s.n);
+  else if(s.second) cue(SWITCH===0?"Switch sides.":"",SWITCH>0?880:660); // left hold starts: beep only
+  else if(s.first&&s.side) cue(s.n+", right side. "+dur(s.t)+".",880);
+  else cue(s.n+". "+dur(s.t)+".",880); }
 
 function start(i){ idx=i; const s=segs[idx]; remaining=s.t; segStart=performance.now(); announce(s); show(); }
 function advance(){ if(idx>=segs.length-1){ finish(); return; } start(idx+1); }
-function finish(){ running=false; cancelAnimationFrame(raf); beep(1040,0.15,3); say("Done.");
+function finish(){ running=false; cancelAnimationFrame(raf); cue("Done.",1040,0.15,3);
   $("phase").textContent=""; $("name").textContent="Done ✦"; $("side").textContent="";
   $("clock").textContent="0:00"; $("next").textContent=""; $("play").textContent="▶"; idx=-1; releaseWake(); }
 
