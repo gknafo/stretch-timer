@@ -103,18 +103,17 @@ const WEEKLY = { // each ★ item once per week; day's additions come BEFORE the
 const BASE2 = [ // EVERY DAY (long holds) — used only in 2x/week mode
   {n:"Single Leg Forward Fold", t:180, sides:true},
   {n:"Cross Shin Forward Fold", t:90,  sides:true},
-  {n:"Child's Pose Lat Stretch",t:90,  sides:true},
-  {n:"Child's Pose",            t:180},
-  {n:"Puppy Dog",               t:90},
+  {n:"Child's Pose",            t:300}, // lat stretch folded in
+  {n:"Puppy Dog",               t:60},
   {n:"Seal",                    t:90},
   {n:"90/90",                   t:120, sides:true},
-  {n:"Seiza",                   t:120},
 ];
 const SPLIT = { // every non-every-day exercise, spread across two ~equal sessions
   A:{label:"Upper Body", items:[
-    {n:"Doorway Shoulder Flexion",t:90,sides:true},{n:"Banded Bully",t:90,sides:true},{n:"Banded Tricep",t:90,sides:true},{n:"Shoulder Dislocates",t:90},
-    {n:"Cat Cow",t:90},{n:"Twisted Cross",t:90,sides:true},{n:"Saddle Thoracic Twist (PVC)",t:150},
-    {n:"Double Flat Needle",t:90,sides:true},{n:"Puppy on Bench",t:90},{n:"Saddle Archer",t:90,sides:true},{n:"Book Opener",t:90,sides:true}]},
+    {n:"Doorway Shoulder Flexion",t:90,sides:true},{n:"Doorway Pec Stretch",t:90,sides:true},{n:"Banded Bully",t:90,sides:true},{n:"Banded Tricep",t:90,sides:true},{n:"Shoulder Dislocates",t:60},
+    {n:"Foam Roller Thoracic Extension",t:120},{n:"Cat Cow",t:90},{n:"Twisted Cross",t:90,sides:true},{n:"Saddle Thoracic Twist (PVC)",t:150},
+    {n:"Double Flat Needle",t:90,sides:true},{n:"Puppy on Bench",t:60},{n:"Saddle Archer",t:90,sides:true},{n:"Book Opener",t:90,sides:true},
+    {n:"Chin Tucks",t:60}]},
   B:{label:"Lower, Core & Extremities", items:[
     {n:"Jefferson Curl",t:90},{n:"Supine Hamstring PNF",t:90,sides:true},{n:"Standing Straddle Forward Fold",t:90},
     {n:"Dragon",t:90,sides:true},{n:"Figure 4 Single Leg Squats",t:45,sides:true},{n:"Butterfly Forward Fold",t:90},{n:"Sumo Squat w/ Shoulder Twist",t:45,sides:true},
@@ -127,7 +126,9 @@ const SPLIT = { // every non-every-day exercise, spread across two ~equal sessio
 /* ----------------------------------------------------------------------------------------------- */
 
 const DAYNAMES=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-let mode="daily", day=(new Date()).getDay(), sel="A", segs=[], idx=-1, running=false, segStart=0, remaining=0, raf=null, wakeLock=null;
+// Modes hidden from the picker (code kept). To bring one back, delete it from this list (old default was mode="daily").
+const HIDDEN_MODES = ["daily","full"];
+let mode="split", day=(new Date()).getDay(), sel="A", segs=[], idx=-1, running=false, segStart=0, remaining=0, raf=null, wakeLock=null;
 function plan(){
   if(mode==="daily") return {label:WEEKLY[day].label, items:WEEKLY[day].items, base:BASE, tag:DAYNAMES[day], everyday:"every day",
     groups:[["Today: "+WEEKLY[day].label, WEEKLY[day].items]]};
@@ -233,7 +234,7 @@ function renderChips(){ dd.innerHTML="";
   else if(mode==="split") [["A","Session A"],["B","Session B"]].forEach(([k,lab])=>mk(lab, k===sel, ()=>{ sel=k; renderChips(); build(); }));
   // full mode: no chips — one session covers everything
 }
-[["daily","Daily"],["split","2× / Week"],["full","1× / Week"]].forEach(([k,lab])=>{ const b=document.createElement("button");
+[["daily","Daily"],["split","2× / Week"],["full","1× / Week"]].filter(([k])=>!HIDDEN_MODES.includes(k)).forEach(([k,lab])=>{ const b=document.createElement("button");
   b.textContent=lab; if(k===mode)b.classList.add("on");
   b.onclick=()=>{ mode=k; [...mm.children].forEach(x=>x.classList.remove("on")); b.classList.add("on"); renderChips(); build(); };
   mm.appendChild(b); });
