@@ -45,6 +45,7 @@
   ol.plan li[data-ex] { counter-increment:ex; }
   ol.plan li[data-ex]::before { content:counter(ex) ". "; display:inline-block; min-width:1.8em; margin-left:-1.8em; }
   ol.plan li.now { color:var(--fg); font-weight:700; }
+  ol.plan li.rest { font-size:12px; opacity:.7; font-style:italic; }
   ol.plan span { float:right; font-variant-numeric:tabular-nums; }
   .sect { color:var(--acc); font-size:12px; letter-spacing:.12em; text-transform:uppercase; margin:14px 0 2px; list-style:none; margin-left:-20px; }
 </style>
@@ -128,19 +129,52 @@ const SPLIT = { // every non-every-day exercise, spread across two ~equal sessio
     {n:"Wrist Stretches",t:120},
     {n:"Neck Side-to-Side Isometrics",t:120},{n:"Seiza",t:120}]},
 };
+
+// ===== ATG and ABS TABS: no prep countdown. {rest:true,t} = a rest block (or R(t)). =====
+const R=t=>({rest:true,t});
+const ATG = { // knees over toes; "core" chip = core only, "extra" chip = core + step-ups
+  core:[
+    {n:"Backwards Walking",t:300},{n:"Tib Raise",t:60,sides:true},{n:"Straight Leg Calf Raise",t:60,sides:true},
+    {n:"KOT Calf Raise",t:60,sides:true},{n:"Patrick Step",t:60,sides:true},{n:"Elephant Walk",t:60,sides:true},
+    {n:"Couch Stretch",t:60,sides:true}],
+  extra:[{n:"Reverse Step Up",t:60,sides:true},{n:"Petersen Step Up",t:60,sides:true}],
+};
+// rounds of moves, on/off seconds each; a round's last move skips its short rest; roundRest goes between rounds
+const circuit=(moves,on,off,rounds,roundRest)=>{ const out=[];
+  for(let r=0;r<rounds;r++){ if(r) out.push(R(roundRest));
+    moves.forEach((n,i)=>{ out.push({n,t:on}); if(i<moves.length-1) out.push(R(off)); }); }
+  return out; };
+const ABS = { // AthleanX 7-minute ab routines
+  A:[{n:"Figure 8",t:60},{n:"Straight-Leg Windshield Wipers",t:60},{n:"Twisting Pistons",t:60},R(30),{n:"Starfish Crunch",t:30},
+     {n:"Same-Side Tuck Planks",t:60},{n:"Upper Circle Crunches (clockwise)",t:60},{n:"Upper Circle Crunches (counterclockwise)",t:60}],
+  B:[{n:"Ab Circles",t:60},{n:"Ab Circles (reverse)",t:60},{n:"Drunken Mountain Climbers",t:60},R(30),
+     {n:"Marching Plank",t:60},{n:"Scissors",t:60},{n:"Starfish Crunch",t:30},R(30),{n:"Russian V-Tuck Twists",t:30}],
+  C:circuit(["Figure 8","Lower Ab Swipes","Bicycle V-Ups","Heaven Press","3-Way Seated Ab Tucks","Knees-to-Elbow Crunches"],20,10,2,60),
+  D:[{n:"Reverse Frog Swipes",t:60},R(30),{n:"Hip Drop Knee Drives",t:60},R(30),{n:"V-Up Leg Hugs",t:60},R(30),
+     {n:"Sledgehammers",t:60},R(30),{n:"Roll-Ups",t:60}],
+};
 /* ----------------------------------------------------------------------------------------------- */
 
 const DAYNAMES=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 // Modes hidden from the picker (code kept). To bring one back, delete it from this list (old default was mode="daily").
 const HIDDEN_MODES = ["daily","full"];
-let mode="split", day=(new Date()).getDay(), sel="A", segs=[], idx=-1, running=false, segStart=0, remaining=0, raf=null, wakeLock=null;
+let mode="split", day=(new Date()).getDay(), segs=[], idx=-1, running=false, segStart=0, remaining=0, raf=null, wakeLock=null;
+let pick={split:"A", atg:"core", abs:"A"}; // selected chip per tab
+// A plan is groups of items run in order; prep/sw are the get-ready and side-switch seconds for that tab.
+const G=(items,head,phase)=>({items,head,phase});
 function plan(){
-  if(mode==="daily") return {label:WEEKLY[day].label, items:WEEKLY[day].items, base:BASE, tag:DAYNAMES[day], everyday:"every day",
-    groups:[["Today: "+WEEKLY[day].label, WEEKLY[day].items]]};
-  if(mode==="full") return {label:"Full Routine", items:SPLIT.A.items.concat(SPLIT.B.items), base:BASE2, tag:"Full routine", everyday:"every day (long holds)",
-    groups:[["Part 1 · "+SPLIT.A.label, SPLIT.A.items],["Part 2 · "+SPLIT.B.label, SPLIT.B.items]]};
-  return {label:SPLIT[sel].label, items:SPLIT[sel].items, base:BASE2, tag:"Session "+sel, everyday:"every day (long holds)",
-    groups:[["Session "+sel+" · "+SPLIT[sel].label, SPLIT[sel].items]]}; }
+  const EV=G(BASE2,"Every Day · long holds","every day"), str={prep:PREP,sw:SWITCH,unit:"timed holds"};
+  if(mode==="daily") return {...str, phase:WEEKLY[day].label+" + every day", tag:DAYNAMES[day],
+    groups:[G(WEEKLY[day].items,"Today: "+WEEKLY[day].label,"today's focus"), G(BASE,"Every Day","every day")]};
+  if(mode==="full") return {...str, phase:"Full Routine + every day (long holds)", tag:"Full routine",
+    groups:[G(SPLIT.A.items,"Part 1 · "+SPLIT.A.label,"today's focus"), G(SPLIT.B.items,"Part 2 · "+SPLIT.B.label,"today's focus"), EV]};
+  if(mode==="atg"){ const x=pick.atg==="extra";
+    return {prep:0, sw:SWITCH, unit:"timed sets", phase:"Knees over toes"+(x?" + step-ups":""), tag:x?"ATG + step-ups":"ATG",
+      groups:[G(ATG.core,"ATG · Knees over toes","knees over toes")].concat(x?[G(ATG.extra,"Step-ups","knees over toes")]:[])}; }
+  if(mode==="abs") return {prep:0, sw:SWITCH, unit:"timed sets", phase:"7-minute abs · routine "+pick.abs, tag:"Abs "+pick.abs,
+    groups:[G(ABS[pick.abs],"Abs "+pick.abs+" · AthleanX 7 min","abs")]};
+  const k=pick.split; return {...str, phase:SPLIT[k].label+" + every day (long holds)", tag:"Session "+k,
+    groups:[G(SPLIT[k].items,"Session "+k+" · "+SPLIT[k].label,"today's focus"), EV]}; }
 
 const $=id=>document.getElementById(id);
 const fmt=s=>{s=Math.max(0,Math.ceil(s));return Math.floor(s/60)+":"+String(s%60).padStart(2,"0");};
@@ -181,49 +215,52 @@ function beep(f=880,d=0.12,n=1){ if(!$("beep").checked) return;
     const t0=actx.currentTime+i*0.2;g.gain.setValueAtTime(0.25,t0);g.gain.exponentialRampToValueAtTime(0.001,t0+d);o.start(t0);o.stop(t0+d);} }
 
 function build(){
-  const p=plan(); segs=[]; const push=(ex,section)=>{
-    segs.push({prep:true,n:ex.n,t:PREP,section});
-    if(ex.sides){ segs.push({n:ex.n,side:"Right side",t:ex.t,section,first:true});
-                  if(SWITCH>0) segs.push({n:ex.n,side:"Switch to left side",t:SWITCH,section,prep:true,swap:true});
-                  segs.push({n:ex.n,side:"Left side",t:ex.t,section,second:true}); }
-    else segs.push({n:ex.n,t:ex.t,section,first:true});
-  };
-  p.items.forEach(e=>push(e,"today")); p.base.forEach(e=>push(e,"base"));
+  const p=plan(); segs=[]; let ii=0;
+  p.groups.forEach(g=>g.items.forEach(ex=>{ const i=ii++, phase=g.phase;
+    if(ex.rest){ segs.push({n:"Rest",rest:true,t:ex.t,i,phase:"rest"}); return; }
+    if(p.prep>0) segs.push({prep:true,n:ex.n,t:p.prep,i,phase});
+    if(ex.sides){ segs.push({n:ex.n,side:"Right side",t:ex.t,i,phase,first:true});
+                  if(p.sw>0) segs.push({n:ex.n,side:"Switch to left side",t:p.sw,i,phase,prep:true,swap:true});
+                  segs.push({n:ex.n,side:"Left side",t:ex.t,i,phase,second:true,sw:p.sw}); }
+    else segs.push({n:ex.n,t:ex.t,i,phase,first:true}); }));
   idx=-1; running=false; remaining=0; cancelAnimationFrame(raf);
   renderPlan(); renderIdle();
 }
 const total=()=>segs.reduce((a,s)=>a+s.t,0);
+const work=s=>!s.prep&&!s.rest; // a timed hold or set
+const nextWork=i=>segs.slice(i+1).find(work);
 
 function renderPlan(){
-  const p=plan(); let h="";
-  const li=(e,i)=>`<li data-ex="${e.n}">${e.n}${e.sides?" (per side)":""}<span>${fmt(e.t)}${e.sides?"/side":""}</span></li>`;
-  p.groups.forEach(([head,items])=>{ h+=`<li class="sect">${head}</li>`; items.forEach(e=>h+=li(e)); });
-  h+=`<li class="sect">Every Day${mode!=="daily"?" · long holds":""}</li>`; p.base.forEach(e=>h+=li(e));
+  const p=plan(); let h="", ii=0;
+  p.groups.forEach(g=>{ h+=`<li class="sect">${g.head}</li>`; g.items.forEach(e=>{ const i=ii++;
+    h+=e.rest?`<li class="rest" data-i="${i}">Rest<span>${fmt(e.t)}</span></li>`
+      :`<li data-ex="${e.n}" data-i="${i}">${e.n}${e.sides?" (per side)":""}<span>${fmt(e.t)}${e.sides?"/side":""}</span></li>`; }); });
   $("plan").innerHTML=h;
 }
-function highlight(){ const cur=idx>=0&&idx<segs.length?segs[idx].n:null;
-  document.querySelectorAll("#plan li[data-ex]").forEach(li=>li.classList.toggle("now",li.dataset.ex===cur)); }
+function highlight(){ const cur=idx>=0&&idx<segs.length?String(segs[idx].i):null;
+  document.querySelectorAll("#plan li[data-i]").forEach(li=>li.classList.toggle("now",li.dataset.i===cur)); }
 
-function renderIdle(){ const p=plan(); $("phase").textContent=p.label+" + "+p.everyday;
+function renderIdle(){ const p=plan(); $("phase").textContent=p.phase;
   $("name").textContent="Ready"; $("side").textContent=""; $("clock").textContent=fmt(total());
-  $("clock").classList.remove("prep"); $("next").textContent="First: "+segs[1].n;
-  $("meta").textContent=`${p.tag} · ${segs.filter(s=>!s.prep).length} timed holds · ${fmt(total())} total`;
+  $("clock").classList.remove("prep"); $("next").textContent="First: "+nextWork(-1).n;
+  $("meta").textContent=`${p.tag} · ${segs.filter(work).length} ${p.unit} · ${fmt(total())} total`;
   $("play").textContent="▶"; highlight(); }
 
 function show(){ const s=segs[idx];
-  $("phase").textContent=s.swap?"switch sides":s.prep?"get ready":(s.section==="today"?"today's focus":"every day");
+  $("phase").textContent=s.swap?"switch sides":s.prep?"get ready":s.phase;
   $("name").textContent=s.n; $("side").textContent=s.side||"";
-  $("clock").classList.toggle("prep",!!s.prep);
-  const nxt=segs.slice(idx+1).find(x=>!x.prep);
+  $("clock").classList.toggle("prep",!!(s.prep||s.rest));
+  const nxt=nextWork(idx);
   $("next").textContent=nxt?("Next: "+nxt.n+(nxt.side?" — "+nxt.side.toLowerCase():"")):"Last one";
   const done=segs.slice(0,idx).reduce((a,x)=>a+x.t,0);
   $("meta").textContent="Session remaining ~"+fmt(total()-done-(s.t-remaining));
   highlight(); }
 
 function announce(s){
-  if(s.swap) cue("Switch sides.",660);                                    // reposition gap, not part of the hold
+  if(s.rest){ const nx=nextWork(idx); cue(nx?"Rest. Next: "+nx.n+".":"Rest.",660); }
+  else if(s.swap) cue("Switch sides.",660);                              // reposition gap, not part of the hold
   else if(s.prep) cue("Next: "+s.n);
-  else if(s.second) cue(SWITCH===0?"Switch sides.":"",SWITCH>0?880:660); // left hold starts: beep only
+  else if(s.second) cue(s.sw===0?"Switch sides.":"",s.sw>0?880:660);    // left hold starts: beep only
   else if(s.first&&s.side) cue(s.n+", right side. "+dur(s.t)+".",880);
   else cue(s.n+". "+dur(s.t)+".",880); }
 
@@ -250,13 +287,14 @@ $("back").onclick=()=>{ if(idx<=0) return; let i=idx-1; while(i>0&&segs[i].prep)
 $("restart").onclick=()=>{ build(); };
 
 const dd=$("days"), mm=$("modes");
+const CHIPS={split:[["A","Session A"],["B","Session B"]], atg:[["core","Core"],["extra","+ Step-ups"]], abs:[["A","A"],["B","B"],["C","C"],["D","D"]]};
 function renderChips(){ dd.innerHTML="";
   const mk=(txt,on,fn)=>{ const b=document.createElement("button"); b.textContent=txt; if(on)b.classList.add("on"); b.onclick=fn; dd.appendChild(b); };
   if(mode==="daily") [1,2,3,4,5,6,0].forEach(d=>mk(DAYNAMES[d], d===day, ()=>{ day=d; renderChips(); build(); }));
-  else if(mode==="split") [["A","Session A"],["B","Session B"]].forEach(([k,lab])=>mk(lab, k===sel, ()=>{ sel=k; renderChips(); build(); }));
+  else if(CHIPS[mode]) CHIPS[mode].forEach(([k,lab])=>mk(lab, k===pick[mode], ()=>{ pick[mode]=k; renderChips(); build(); }));
   // full mode: no chips — one session covers everything
 }
-[["daily","Daily"],["split","2× / Week"],["full","1× / Week"]].filter(([k])=>!HIDDEN_MODES.includes(k)).forEach(([k,lab])=>{ const b=document.createElement("button");
+[["daily","Daily"],["split","2× / Week"],["full","1× / Week"],["atg","ATG"],["abs","Abs"]].filter(([k])=>!HIDDEN_MODES.includes(k)).forEach(([k,lab])=>{ const b=document.createElement("button");
   b.textContent=lab; if(k===mode)b.classList.add("on");
   b.onclick=()=>{ mode=k; [...mm.children].forEach(x=>x.classList.remove("on")); b.classList.add("on"); renderChips(); build(); };
   mm.appendChild(b); });
